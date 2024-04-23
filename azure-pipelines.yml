@@ -1,0 +1,99 @@
+trigger:
+  branches:
+    include:
+      - sub_uat
+      - main_uat
+      - sub_main
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: 'Env variable' #include your variable group
+- name: MDAPI_DEPLOYDIR
+  value: 'FirstProject/force-app/main/default'
+- name: INSTANCEURL_UAT
+  value: 'https://test.salesforce.com'
+- name: INSTANCEURL_PROD
+  value: 'https://login.salesforce.com'
+- name: ALIAS
+  value: 'qa'
+- name: TESTLEVEL
+  value: 'RunLocalTests'
+
+stages:
+- stage: UAT_Validate
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/sub_uat')
+  jobs:
+  - job: UAT_ValidateJob
+    steps:
+    - script: |
+        echo "Installing Salesforce CLI..."
+        npm install --global sfdx-cli
+      displayName: 'Install Salesforce CLI'
+      
+    - script: |
+        echo "Validation Started in UAT"
+        sfdx --version
+        openssl enc -nosalt -aes-256-cbc -d -in assets/server1.key.enc -out assets/server.key -base64 -K $(DECRYPTION_KEY_UAT) -iv $(DECRYPTION_IV_UAT)
+        sfdx force:auth:jwt:grant --instance-url $(INSTANCEURL_UAT) --client-id $(CONSUMER_KEY_UAT) --jwt-key-file assets/server.key --username $(USERNAME_UAT) --alias $(ALIAS)
+        sfdx force:mdapi:deploy --checkonly --wait 10 --deploydir $(MDAPI_DEPLOYDIR) --targetusername $(ALIAS) --testlevel $(TESTLEVEL)
+        echo "Validation completed in UAT"
+      displayName: 'Validate Changes in UAT'
+      
+
+- stage: UAT_Deploy
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main_uat')
+  jobs:
+  - job: UAT_DeployJob
+    steps:
+    - script: |
+        echo "Installing Salesforce CLI..."
+        npm install --global sfdx-cli
+      displayName: 'Install Salesforce CLI'
+    - script: |
+        echo "Deployment Started in UAT"
+        openssl enc -nosalt -aes-256-cbc -d -in assets/server1.key.enc -out assets/server.key -base64 -K $(DECRYPTION_KEY_UAT) -iv $(DECRYPTION_IV_UAT)
+        sfdx force:auth:jwt:grant --instanceurl $(INSTANCEURL_UAT) --clientid $(CONSUMER_KEY_UAT) --jwtkeyfile assets/server.key --username $(USERNAME_UAT) --setalias $(ALIAS)
+        sfdx force:mdapi:deploy --wait 10 --deploydir $(MDAPI_DEPLOYDIR) --targetusername $(ALIAS) --testlevel $(TESTLEVEL)
+        echo "Deployment completed in UAT"
+      displayName: 'Deploy Changes in UAT'
+      
+
+- stage: Prod_Validate
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/sub_main')
+  jobs:
+  - job: Prod_ValidateJob
+    steps:
+    - script: |
+        echo "Installing Salesforce CLI..."
+        npm install --global sfdx-cli
+      displayName: 'Install Salesforce CLI'
+    - script: |
+        echo "Validation Started in Prod"
+        openssl enc -nosalt -aes-256-cbc -d -in assets/server.key.enc -out assets/server.key -base64 -K $(DECRYPTION_KEY_PROD) -iv $(DECRYPTION_IV_PROD)
+        sfdx force:auth:jwt:grant --instanceurl $(INSTANCEURL_PROD) --clientid $(CONSUMER_KEY_PROD) --jwtkeyfile assets/server.key --username $(USERNAME_PROD) --setalias $(ALIAS)
+        sfdx force:mdapi:deploy --checkonly --wait 10 --deploydir $(MDAPI_DEPLOYDIR) --targetusername $(ALIAS) --testlevel $(TESTLEVEL)
+        echo "Validation completed in Prod"
+      displayName: 'Validate Changes in Prod'
+      
+
+- stage: Prod_Deploy
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+  jobs:
+  - job: Prod_DeployJob
+    steps:
+    - script: |
+        echo "Installing Salesforce CLI..."
+        npm install --global sfdx-cli
+      displayName: 'Install Salesforce CLI'
+    
+    - script: |
+        echo "Deployment Started in Prod"
+        openssl enc -nosalt -aes-256-cbc -d -in assets/server.key.enc -out assets/server.key -base64 -K $(DECRYPTION_KEY_PROD) -iv $(DECRYPTION_IV_PROD)
+        sfdx force:auth:jwt:grant --instanceurl $(INSTANCEURL_PROD) --clientid $(CONSUMER_KEY_PROD) --jwtkeyfile assets/server.key --username $(USERNAME_PROD) --setalias $(ALIAS)
+        sfdx force:mdapi:deploy --wait 10 --deploydir $(MDAPI_DEPLOYDIR) --targetusername $(ALIAS) --testlevel $(TESTLEVEL)
+        echo "Deployment completed in Prod"
+      displayName: 'Deploy changes in Prod'
+      
